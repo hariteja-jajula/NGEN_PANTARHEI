@@ -33,7 +33,7 @@ fi
 
 # Activate the Conda environment
 echo -e "${CYAN}Activating the Conda environment '${ENV_NAME}'...${RESET}"
-source activate "${ENV_NAME}"
+conda activate "${ENV_NAME}"
 
 # Determine and set the CONDA_PREFIX dynamically
 CONDA_PREFIX=$(conda env list | grep $ENV_NAME | awk '{print $2}')
