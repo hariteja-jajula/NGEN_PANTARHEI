@@ -21,13 +21,18 @@ ulimit -n 10000
 # Define the name for the Conda environment
 ENV_NAME="ngen_env"
 
-# Create Conda environment from YML file
-echo -e "${CYAN}Creating Conda environment from environment_setup.yml...${RESET}"
-conda env create -f environment_setup.yml -n $ENV_NAME
+echo -e "${CYAN}Checking for the Conda environment '${ENV_NAME}'...${RESET}"
+if ! conda info --envs | grep "${ENV_NAME}"; then
+    echo -e "${YELLOW}Environment '${ENV_NAME}' not found. Creating from environment_setup.yml...${RESET}"
+    conda env create -f environment_setup.yml -n "${ENV_NAME}"
+    echo -e "${GREEN}Environment '${ENV_NAME}' created successfully.${RESET}"
+else
+    echo -e "${GREEN}Environment '${ENV_NAME}' already exists. Proceeding with activation.${RESET}"
+fi
 
 # Activate the Conda environment
-echo -e "${CYAN}Activating the Conda environment...${RESET}"
-source activate $ENV_NAME
+echo -e "${CYAN}Activating the Conda environment '${ENV_NAME}'...${RESET}"
+source activate "${ENV_NAME}"
 
 # Determine and set the CONDA_PREFIX dynamically
 CONDA_PREFIX=$(conda env list | grep $ENV_NAME | awk '{print $2}')
