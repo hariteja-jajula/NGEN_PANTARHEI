@@ -20,6 +20,7 @@ ulimit -n 10000
 
 # Define the name for the Conda environment
 ENV_NAME="ngen_env"
+conda init
 
 echo -e "${CYAN}Checking for the Conda environment '${ENV_NAME}'...${RESET}"
 if ! conda info --envs | grep "${ENV_NAME}"; then
