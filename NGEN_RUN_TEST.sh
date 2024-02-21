@@ -1,4 +1,10 @@
 #!/bin/bash
+#SBATCH --job-name=ngen_run                             # Job_name
+#SBATCH --partition=normal                              # Partition
+#SBATCH --nodelist=compute002                           # List the nodes
+#SBATCH --ntasks=10                                     # Number of tasks per node
+#SBATCH --time=24:00:00                                 # Time limit
+#SBATCH --output=./output/ngen_run_%j.log               # Output file
 
 # Define necessary modules for loading
 MODULES=(
