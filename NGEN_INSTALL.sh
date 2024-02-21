@@ -18,7 +18,22 @@ RESET='\033[0m'
 # Increase `ulimit` for open files
 ulimit -n 10000
 
-# Load necessary modules
+# Define the name for the Conda environment
+ENV_NAME="ngen_env"
+
+# Create Conda environment from YML file
+echo -e "${CYAN}Creating Conda environment from environment_setup.yml...${RESET}"
+conda env create -f environment_setup.yml -n $ENV_NAME
+
+# Activate the Conda environment
+echo -e "${CYAN}Activating the Conda environment...${RESET}"
+source activate $ENV_NAME
+
+# Determine and set the CONDA_PREFIX dynamically
+CONDA_PREFIX=$(conda env list | grep $ENV_NAME | awk '{print $2}')
+echo -e "${CYAN}Conda environment prefix: $CONDA_PREFIX${RESET}"
+
+# Load necessary modules (Commented out if not applicable or handled by Conda)
 module load gnu12
 module load py3-numpy/1.19.5
 module load Anaconda3/2023.09
@@ -28,15 +43,15 @@ module load netCDF-C++4/4.3.1-gompi-2023a
 module load CMake/3.26.3-GCCcore-12.3.0
 module load cmake/3.24.2
 
-# Activate the Conda environment
-source activate /home/hjajula/ngen/ngen/hjajula/.conda/envs/ngen_build
-
 # Adjusting PATH and PYTHONPATH to ensure Python from the Conda environment is used
 export PATH="$CONDA_PREFIX/bin:$PATH"
 export PYTHONPATH="$CONDA_PREFIX/lib/python3.9/site-packages:$PYTHONPATH"
 
 # Ensuring UDUNITS library is correctly found
 export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:$LD_LIBRARY_PATH"
+
+# Set BOOST_ROOT environment variable
+export BOOST_ROOT="$CONDA_PREFIX"
 
 # Remove existing ngen directory if it exists
 echo -e "${YELLOW}Checking for existing ngen directory and removing if exists...${RESET}"
@@ -59,27 +74,10 @@ cd ./extern/
 NGEN_EXTERN_DIR=$(pwd)
 echo "========================================="
 
-# Function to handle each external module build
-build_module() {
-    local module_name=$1
-    local cmake_target=$2
-    echo -e "${GREEN}BUILDING $module_name${RESET}"
-    cd "$NGEN_EXTERN_DIR/$module_name"
-    cmake -B cmake_build -S .
-    cmake --build cmake_build --target $cmake_target -- -j 10
-    cd "$NGEN_EXTERN_DIR"
-    echo "========================================="
-    echo ""
-}
-
-# Install NetCDF C++4 latest version (Function definition not shown for brevity)
-
-# Build external modules (Function calls not shown for brevity)
-
 cd "$NGEN_BASE_DIR"
 
-# Configure and build NGen in serial mode
-echo -e "${CYAN}Configuring and building NGen in serial mode...${RESET}"
+# Configure and build NGen in serial mode with detailed configuration options
+echo -e "${CYAN}Configuring and building NGen in serial mode with detailed options...${RESET}"
 mkdir -p serialbuild && cd serialbuild
 cmake .. -DCMAKE_EXE_LINKER_FLAGS="-L$CONDA_PREFIX/lib" \
 -DNGEN_MPI_ACTIVE=OFF \
@@ -95,13 +93,14 @@ cmake .. -DCMAKE_EXE_LINKER_FLAGS="-L$CONDA_PREFIX/lib" \
 -DNGEN_WITH_ROUTING=ON \
 -DNGEN_WITH_TESTS=ON \
 -DNGEN_QUIET=ON \
+-DCMAKE_BUILD_TYPE=Release \
 -B . -S ..
 make -j 10
 echo -e "${GREEN}NGen serial build complete.${RESET}"
 cd ..
 
-# Configure and build NGen in parallel mode
-echo -e "${CYAN}Configuring and building NGen in parallel mode...${RESET}"
+# Configure and build NGen in parallel mode with detailed configuration options
+echo -e "${CYAN}Configuring and building NGen in parallel mode with detailed options...${RESET}"
 mkdir -p parallelbuild && cd parallelbuild
 cmake .. -DCMAKE_EXE_LINKER_FLAGS="-L$CONDA_PREFIX/lib" \
 -DNGEN_MPI_ACTIVE=ON \
@@ -117,7 +116,7 @@ cmake .. -DCMAKE_EXE_LINKER_FLAGS="-L$CONDA_PREFIX/lib" \
 -DNGEN_WITH_ROUTING=ON \
 -DNGEN_WITH_TESTS=ON \
 -DNGEN_QUIET=ON \
+-DCMAKE_BUILD_TYPE=Release \
 -B . -S ..
 make -j 10
 echo -e "${GREEN}NGen parallel build complete.${RESET}"
-
