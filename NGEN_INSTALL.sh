@@ -36,7 +36,7 @@ echo -e "${CYAN}Activating the Conda environment '${ENV_NAME}'...${RESET}"
 conda activate "${ENV_NAME}"
 
 # Determine and set the CONDA_PREFIX dynamically
-CONDA_PREFIX=$(conda env list | grep $ENV_NAME | awk '{print $2}')
+CONDA_PREFIX=$(conda env list | grep "\b${ENV_NAME}\b" | awk '{print $2}')
 echo -e "${CYAN}Conda environment prefix: $CONDA_PREFIX${RESET}"
 
 # Load necessary modules (Commented out if not applicable or handled by Conda)
@@ -79,6 +79,27 @@ echo "========================================="
 cd ./extern/
 NGEN_EXTERN_DIR=$(pwd)
 echo "========================================="
+
+# Function to handle each external module build
+build_module() {
+    local module_name=$1
+    local cmake_target=$2
+    echo -e "${GREEN}BUILDING $module_name${RESET}"
+    cd "$NGEN_EXTERN_DIR/$module_name"
+    if cmake -B cmake_build -S . && cmake --build cmake_build --target $cmake_target -- -j 10; then
+        echo -e "${GREEN}Successfully built $module_name.${RESET}"
+    else
+        echo -e "${RED}Failed to build $module_name. Skipping...${RESET}"
+    fi
+    cd "$NGEN_EXTERN_DIR"
+    echo "========================================="
+    echo ""
+}
+
+# Build external modules
+for module in bmi-cxx cfe iso_c_fortran_bmi netcdf-cxx4 pybind11 SoilFreezeThaw SoilMoistureProfiles test_bmi_c test_bmi_cpp test_bmi_fortran test_bmi_py topmodel; do
+    build_module $module "all"
+done
 
 cd "$NGEN_BASE_DIR"
 
