@@ -147,7 +147,7 @@ cmake .. -DCMAKE_EXE_LINKER_FLAGS="-L$CONDA_PREFIX/lib" \
 -B . -S ..
 make -j 10
 echo -e "${GREEN}NGen parallel build complete.${RESET}"
-
+cd ..
 # Run the serial tests and remove output from previous test runs
 echo -e "${CYAN}Running serial tests...${RESET}"
 cmake --build serialbuild --target test
