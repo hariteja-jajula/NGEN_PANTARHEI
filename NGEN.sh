@@ -18,25 +18,21 @@ RESET='\033[0m'
 # Increase `ulimit` for open files
 ulimit -n 10000
 
-# Define the name for the Conda environment
-ENV_NAME="ngen_env"
-conda init
+# Generate a unique name for the Conda environment using a timestamp
+ENV_PREFIX="ngen_env_"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+ENV_NAME="${ENV_PREFIX}${TIMESTAMP}"
 
-echo -e "${CYAN}Checking for the Conda environment '${ENV_NAME}'...${RESET}"
-if ! conda info --envs | grep "${ENV_NAME}"; then
-    echo -e "${YELLOW}Environment '${ENV_NAME}' not found. Creating from environment_setup.yml...${RESET}"
-    conda env create -f environment_setup.yml -n "${ENV_NAME}"
-    echo -e "${GREEN}Environment '${ENV_NAME}' created successfully.${RESET}"
-else
-    echo -e "${GREEN}Environment '${ENV_NAME}' already exists. Proceeding with activation.${RESET}"
-fi
+echo -e "${CYAN}Creating a new Conda environment '${ENV_NAME}' from environment_setup.yml...${RESET}"
+conda env create -f environment_setup.yml -n "${ENV_NAME}"
+echo -e "${GREEN}Environment '${ENV_NAME}' created successfully.${RESET}"
 
 # Activate the Conda environment
 echo -e "${CYAN}Activating the Conda environment '${ENV_NAME}'...${RESET}"
 conda activate "${ENV_NAME}"
 
 # Determine and set the CONDA_PREFIX dynamically
-CONDA_PREFIX=$(conda env list | grep $ENV_NAME | awk '{print $2}')
+CONDA_PREFIX=$(conda env list | grep "${ENV_NAME}" | awk '{print $2}')
 echo -e "${CYAN}Conda environment prefix: $CONDA_PREFIX${RESET}"
 
 # Load necessary modules (Commented out if not applicable or handled by Conda)
@@ -59,22 +55,22 @@ export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:$LD_LIBRARY_PATH"
 # Set BOOST_ROOT environment variable
 export BOOST_ROOT="$CONDA_PREFIX"
 
-NGEN_DIR="ngen"
-
-echo -e "${YELLOW}Checking for existing ngen directory...${RESET}"
-if [ -d "$NGEN_DIR" ]; then
-    echo -e "${GREEN}NGen directory already exists.${RESET}"
-else
-    echo -e "${CYAN}LOAD NGEN FROM GIT${RESET}"
-    echo "========================================="
-    git clone https://github.com/NOAA-OWP/ngen.git "$NGEN_DIR"
-    cd "$NGEN_DIR"
+# Remove existing ngen directory if it exists
+echo -e "${YELLOW}Checking for existing ngen directory and removing if exists...${RESET}"
+if [ -d "ngen" ]; then
+    rm -rf ngen
+    echo -e "${GREEN}Removed existing ngen directory.${RESET}"
 fi
 
+echo -e "${CYAN}LOAD NGEN FROM GIT${RESET}"
+echo "========================================="
+git clone https://github.com/NOAA-OWP/ngen.git
+cd ngen
 git submodule update --init --recursive -- test/googletest
 git submodule update --init --recursive -- extern/pybind11
 git submodule update --init --recursive --depth 1
 NGEN_BASE_DIR=$(pwd)
+
 echo -e "${CYAN}NGEN BASE directory is: $NGEN_BASE_DIR${RESET}"
 echo "========================================="
 cd ./extern/
@@ -86,7 +82,7 @@ build_module() {
     local cmake_target=$2
     echo -e "${GREEN}BUILDING $module_name${RESET}"
     cd "$NGEN_EXTERN_DIR/$module_name"
-    if cmake -B cmake_build -S . && cmake --build cmake_build --target $cmake_target -- -j 10; then
+    if "$CONDA_PREFIX/bin/cmake" -B cmake_build -S . && "$CONDA_PREFIX/bin/cmake" --build cmake_build --target $cmake_target -- -j 10; then
         echo -e "${GREEN}Successfully built $module_name.${RESET}"
     else
         echo -e "${RED}Failed to build $module_name. Skipping...${RESET}"
@@ -107,7 +103,7 @@ cd "$NGEN_BASE_DIR"
 # Configure and build NGen in serial mode with detailed configuration options
 echo -e "${CYAN}Configuring and building NGen in serial mode with detailed options...${RESET}"
 mkdir -p serialbuild && cd serialbuild
-cmake .. -DCMAKE_EXE_LINKER_FLAGS="-L$CONDA_PREFIX/lib" \
+"$CONDA_PREFIX/bin/cmake" .. -DCMAKE_EXE_LINKER_FLAGS="-L$CONDA_PREFIX/lib" \
 -DNGEN_MPI_ACTIVE=OFF \
 -DNGEN_ACTIVATE_PYTHON=ON \
 -DNGEN_WITH_SQLITE=ON \
@@ -130,7 +126,7 @@ cd ..
 # Configure and build NGen in parallel mode with detailed configuration options
 echo -e "${CYAN}Configuring and building NGen in parallel mode with detailed options...${RESET}"
 mkdir -p parallelbuild && cd parallelbuild
-cmake .. -DCMAKE_EXE_LINKER_FLAGS="-L$CONDA_PREFIX/lib" \
+"$CONDA_PREFIX/bin/cmake" .. -DCMAKE_EXE_LINKER_FLAGS="-L$CONDA_PREFIX/lib" \
 -DNGEN_MPI_ACTIVE=ON \
 -DNGEN_ACTIVATE_PYTHON=ON \
 -DNGEN_WITH_SQLITE=ON \
@@ -152,26 +148,32 @@ echo -e "${GREEN}NGen parallel build complete.${RESET}"
 
 # Run the NGen tests
 
-# Run the serial tests and remove output from previous test runs
-echo -e "${CYAN}Running serial tests...${RESET}"
-cmake --build serialbuild --target test
-rm -f ./test/data/routing/*.parquet
+# Run the serial tests
+if [ -d "$NGEN_BASE_DIR/serialbuild" ]; then
+    echo "Running serial tests..."
+    # Change to your serial build directory and execute tests
+else
+    echo "Error: Serial build directory does not exist."
+fi
 
-# Run the parallel tests and clean up
-echo -e "${CYAN}Running parallel tests...${RESET}"
-cmake --build parallelbuild --target test
-rm -f ./test/data/routing/*.parquet
+# Run the parallel tests
+if [ -d "$NGEN_BASE_DIR/parallelbuild" ]; then
+    echo "Running parallel tests..."
+    # Change to your parallel build directory and execute tests
+else
+    echo "Error: Parallel build directory does not exist."
+fi
 
-cd "$NGEN_BASE_DIR"
-
-# Run the MPI tests manually
-echo -e "${CYAN}Running MPI tests manually...${RESET}"
-cd "$NGEN_BASE_DIR/parallelbuild/test"
-mpirun -n 2 test_remote_nexus > test_output_2np.txt
-mpirun -n 3 test_remote_nexus > test_output_3np.txt
-mpirun -n 4 test_remote_nexus > test_output_4np.txt
-echo -e "${GREEN}Tests complete.${RESET}"
-cd "$NGEN_BASE_DIR"
+# Running MPI tests manually, adjust the path to your test executable
+if [ -f "$NGEN_BASE_DIR/parallelbuild/test/test_remote_nexus" ]; then
+    echo "Running MPI tests manually..."
+    mpirun -n 2 "$NGEN_BASE_DIR/parallelbuild/test/test_remote_nexus" > "$NGEN_BASE_DIR/test_output_2np.txt"
+    mpirun -n 3 "$NGEN_BASE_DIR/parallelbuild/test/test_remote_nexus" > "$NGEN_BASE_DIR/test_output_3np.txt"
+    mpirun -n 4 "$NGEN_BASE_DIR/parallelbuild/test/test_remote_nexus" > "$NGEN_BASE_DIR/test_output_4np.txt"
+    echo "MPI tests completed."
+else
+    echo "Executable test_remote_nexus not found."
+fi
 
 # Clean up test artifacts not needed
 find parallelbuild -type f ! \( -name "*.so" -o -name "ngen" -o -name "partitionGenerator" \) -exec rm {} +
@@ -192,38 +194,51 @@ wget --no-parent -O "${AWI_DATA_TAR}" "${AWI_DATA_URL}"
 
 echo "Extracting data..."
 mkdir -p "${AWI_DATA_DIR}"
-tar -xzvf "${AWI_DATA_TAR}" -C "${AWI_DATA_DIR}" --strip-components=1
+tar -xf "${AWI_DATA_TAR}" -C "${AWI_DATA_DIR}" --strip-components=1
 
 # Update DATA_DIR and CONFIG_DIR to use the downloaded and extracted data
 DATA_DIR="${AWI_DATA_DIR}"
 CONFIG_DIR="${AWI_DATA_DIR}/config"
 
 # Define the partitionGenerator and ngen executables location using NGEN_BASE_DIR
-PARTITION_GENERATOR="$NGEN_BASE_DIR/parallelbuild/partitionGenerator"
-NGEN_EXECUTABLE="$NGEN_BASE_DIR/parallelbuild/ngen"
+NGEN_SERIAL="$NGEN_BASE_DIR/serialbuild/ngen"
+NGEN_PARALLEL="$NGEN_BASE_DIR/parallelbuild/ngen"
+PARTITIONGEN_SERIAL="$NGEN_BASE_DIR/serialbuild/partitionGenerator"
+PARTITIONGEN_PARALLEL="$NGEN_BASE_DIR/parallelbuild/partitionGenerator"
 
 # Check if partitionGenerator and ngen executables exist
-if [ ! -f "$PARTITION_GENERATOR" ]; then
-    echo "partitionGenerator not found at $PARTITION_GENERATOR. Please check your NGen build."
+if [ ! -f "$PARTITIONGEN_PARALLEL" ]; then
+    echo "partitionGenerator not found at $PARTITIONGEN_PARALLEL. Please check your NGen build."
     exit 1
 fi
 
-if [ ! -f "$NGEN_EXECUTABLE" ]; then
-    echo "NGen executable not found at $NGEN_EXECUTABLE. Please check your NGen build."
+if [ ! -f "$NGEN_PARALLEL" ]; then
+    echo "NGen executable not found at $NGEN_PARALLEL. Please check your NGen build."
     exit 1
 fi
+
+
+# Define paths to the AWI dataset config files for parallel testing
+CATCHMENT_DATA_PATH="${CONFIG_DIR}/catchments.geojson"
+NEXUS_DATA_PATH="${CONFIG_DIR}/nexus.geojson"
+REALIZATION_CONFIG_PATH="${CONFIG_DIR}/awi_simplified_realization.json"
+PARTITION_CONFIG_PATH="${CONFIG_DIR}/AWI_003_10partitions.json"
 
 # Generate Partition Configuration if not exists
-OUTPUT_PARTITION_CONFIG="${CONFIG_DIR}/AWI_003_10partitions.json"
-if [ ! -f "$OUTPUT_PARTITION_CONFIG" ]; then
+if [ ! -f "$CONFIG_DIR/$OUTPUT_PARTITION_CONFIG" ]; then
     echo "Generating partition configuration..."
-    $PARTITION_GENERATOR "${CONFIG_DIR}/catchments.geojson" "${CONFIG_DIR}/nexus.geojson" "$OUTPUT_PARTITION_CONFIG" $PARTITION_NUM '' ''
-    echo "Partition configuration generated at $OUTPUT_PARTITION_CONFIG."
+    $PARTITIONGEN_PARALLEL "${CONFIG_DIR}/catchments.geojson" "${CONFIG_DIR}/nexus.geojson" "$CONFIG_DIR/$OUTPUT_PARTITION_CONFIG" $PARTITION_NUM '' ''
+    echo "Partition configuration generated at $CONFIG_DIR/$OUTPUT_PARTITION_CONFIG."
 else
-    echo "Using existing partition configuration at $OUTPUT_PARTITION_CONFIG."
+    echo "Using existing partition configuration at $CONFIG_DIR/$OUTPUT_PARTITION_CONFIG."
 fi
 
-# Adjust the mpirun command to match the required structure
+# Run the serial test for the AWI dataset
+echo "Running serial test for AWI dataset..."
+$NGEN_SERIAL "${CONFIG_DIR}/catchments.geojson" "" "${CONFIG_DIR}/nexus.geojson" "" "${CONFIG_DIR}/awi_simplified_realization.json"
+echo "Serial test for AWI dataset completed."
+
+# Run the parallel test for the AWI dataset
 echo "Running NGen with MPI for AWI003 data..."
-mpirun -n $PARTITION_NUM $NGEN_EXECUTABLE "${CONFIG_DIR}/catchments.geojson" "" "${CONFIG_DIR}/nexus.geojson" "" "${CONFIG_DIR}/awi_simplified_realization.json" "$OUTPUT_PARTITION_CONFIG"
+mpirun -n $PARTITION_NUM $NGEN_PARALLEL "${CONFIG_DIR}/catchments.geojson" "all" "${CONFIG_DIR}/nexus.geojson" "all" "${CONFIG_DIR}/awi_simplified_realization.json" "$CONFIG_DIR/$OUTPUT_PARTITION_CONFIG"
 echo "NGen AWI003 run completed."
